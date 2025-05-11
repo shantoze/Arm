@@ -1,4 +1,4 @@
-name: Build CMake for Android (armeabi-v7a)
+name: Build CMake for Android
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake make git wget unzip
+          sudo apt-get install -y ninja-build cmake make git wget unzip patch
 
       - name: Set up Android SDK and NDK
         run: |
@@ -46,17 +46,13 @@ jobs:
 
       - name: Clone CMake source code
         run: |
-          git clone --depth 1 --branch ${{ env.CMAKE_VERSION }} https://github.com/Kitware/CMake.git ${{ env.SRC_DIR }}
-
-      # Patch cmlibuv core.c for sched.h includes
-      - name: Patch cmlibuv core.c for sched.h includes
+          git clone -- name: Patch cmlibuv core.c for sched.h includes
         run: |
           CORE_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/core.c"
           sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
           sed -i '2i#include <sched.h>' "$CORE_C_PATH"
           head -n 10 "$CORE_C_PATH"
 
-      # Patch cmlibuv process.c for sched.h, pthread.h, defines, and stub for pthread_setaffinity_np
       - name: Patch cmlibuv process.c for sched.h, pthread.h, defines, and stub for pthread_setaffinity_np
         run: |
           PROCESS_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/process.c"
@@ -69,7 +65,6 @@ jobs:
           sed -i '7i#endif' "$PROCESS_C_PATH"
           head -n 10 "$PROCESS_C_PATH"
 
-      # Patch cmlibuv pipe.c for unistd.h and pipe2 define
       - name: Patch cmlibuv pipe.c for unistd.h and pipe2 define
         run: |
           PIPE_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/pipe.c"
@@ -77,14 +72,11 @@ jobs:
           sed -i '2i#include <unistd.h>' "$PIPE_C_PATH"
           head -n 10 "$PIPE_C_PATH"
 
-      # Patch cmAffinity.cxx to disable pthread affinity for Android
       - name: Patch cmAffinity.cxx to disable pthread affinity for Android
         run: |
           CMAFFINITY_CXX_PATH="${{ env.SRC_DIR }}/Source/cmAffinity.cxx"
           CMAFFINITY_PATCH_FILE="${{ env.SRC_DIR }}/cmAffinity.patch"
           cat << 'EOF_PATCH' > "$CMAFFINITY_PATCH_FILE"
---- a/Source/cmAffinity.cxx
-+++ b/Source/cmAffinity.cxx
 @@ -51,7 +51,9 @@
        }
      }
@@ -106,7 +98,6 @@ jobs:
 EOF_PATCH
           patch -p1 -d "${{ env.SRC_DIR }}" < "$CMAFFINITY_PATCH_FILE"
 
-      # Create dummy android_lf.h
       - name: Create dummy android_lf.h
         run: |
           DUMMY_HEADER_DIR="${{ env.SRC_DIR }}/Utilities/cmlibarchive/contrib/android/include"
@@ -114,7 +105,6 @@ EOF_PATCH
           mkdir -p "$DUMMY_HEADER_DIR"
           touch "$DUMMY_HEADER_PATH"
 
-      # Patch cmlibarchive archive.h to comment out android_lf.h include
       - name: Patch cmlibarchive archive.h to comment out android_lf.h include
         run: |
           ARCHIVE_H_PATH="${{ env.SRC_DIR }}/Utilities/cmlibarchive/libarchive/archive.h"
