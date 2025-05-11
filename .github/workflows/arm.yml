@@ -10,7 +10,6 @@ jobs:
       ANDROID_NDK_VERSION: "26.3.11579264"
       ANDROID_PLATFORM: "android-34"
       ANDROID_ABI: "armeabi-v7a"
-      CMAKE_VERSION: "v3.29.3"
       BUILD_DIR: "/home/runner/work/Arm/Arm/cmake-build"
       SRC_DIR: "/home/runner/work/Arm/Arm/cmake-src"
       INSTALL_DIR: "/home/runner/work/Arm/Arm/cmake-android-arm-out"
@@ -39,107 +38,17 @@ jobs:
           rm -rf $ANDROID_SDK_ROOT/cmdline-tools-temp tools.zip
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
-          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --update
-          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platforms;${ANDROID_PLATFORM}" "build-tools;34.0.0" "ndk;${ANDROID_NDK_VERSION}"
+          yes | sdkmanager --licenses
+          yes | sdkmanager --update
+          yes | sdkmanager "platforms;${ANDROID_PLATFORM}" "build-tools;34.0.0" "ndk;${ANDROID_NDK_VERSION}"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
-
-      # Debug step to check Android SDK and NDK installation
-      - name: Validate Android SDK and NDK Installation
-        run: |
-          echo "SDK Root: $ANDROID_SDK_ROOT"
-          ls -l $ANDROID_SDK_ROOT
-          echo "NDK Installed Versions:"
-          ls -l $ANDROID_SDK_ROOT/ndk
 
       # Step 4: Clone CMake source code
       - name: Clone CMake source code
         run: |
-          git clone --depth 1 --branch ${CMAKE_VERSION} https://github.com/Kitware/CMake.git ${SRC_DIR}
+          git clone --depth 1 https://github.com/Kitware/CMake.git ${SRC_DIR}
 
-      # Step 5: Patch cmlibuv core.c for sched.h includes
-      - name: Patch cmlibuv core.c for sched.h includes
-        run: |
-          CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
-          if [ ! -f "$CORE_C_PATH" ]; then
-            echo "Error: File $CORE_C_PATH not found!" && exit 1
-          fi
-          sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
-          sed -i '2i#include <sched.h>' "$CORE_C_PATH"
-          head -n 10 "$CORE_C_PATH"
-
-      # Step 6: Patch cmlibuv process.c
-      - name: Patch cmlibuv process.c
-        run: |
-          PROCESS_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/process.c"
-          if [ ! -f "$PROCESS_C_PATH" ]; then
-            echo "Error: File $PROCESS_C_PATH not found!" && exit 1
-          fi
-          sed -i '1i#define _GNU_SOURCE' "$PROCESS_C_PATH"
-          sed -i '2i#include <sched.h>' "$PROCESS_C_PATH"
-          sed -i '3i#include <pthread.h>' "$PROCESS_C_PATH"
-          sed -i '4i#ifndef pthread_setaffinity_np' "$PROCESS_C_PATH"
-          sed -i '5i#warning \"Using stub pthread_setaffinity_np - actual function may be missing or require different defines\"' "$PROCESS_C_PATH"
-          sed -i '6iint pthread_setaffinity_np(pthread_t, size_t, const cpu_set_t *);' "$PROCESS_C_PATH"
-          sed -i '7i#endif' "$PROCESS_C_PATH"
-
-      # Step 7: Patch cmlibuv pipe.c
-      - name: Patch cmlibuv pipe.c
-        run: |
-          PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
-          if [ ! -f "$PIPE_C_PATH" ]; then
-            echo "Error: File $PIPE_C_PATH not found!" && exit 1
-          fi
-          sed -i '1i#define _GNU_SOURCE' "$PIPE_C_PATH"
-          sed -i '2i#include <unistd.h>' "$PIPE_C_PATH"
-
-      # Step 8: Create patch file for cmAffinity.cxx
-      - name: Create patch file
-        run: |
-          CMAFFINITY_PATH="${SRC_DIR}/Source/cmAffinity.cxx"
-          if [ ! -f "$CMAFFINITY_PATH" ]; then
-            echo "Error: File $CMAFFINITY_PATH not found!" && exit 1
-          fi
-          echo '--- a/Source/cmAffinity.cxx
-+++ b/Source/cmAffinity.cxx
-@@ -51,6 +51,7 @@
-       }
-     }
- #  else
-+#if !defined(ANDROID)
-     cm_cpuset_t cpuset;
-     CPU_ZERO(&cpuset);
-     if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) == 0) {
-@@ -59,6 +60,7 @@
-           processorsAvailable.insert(i);
-         }
-       }
-     }
-+#endif // !defined(ANDROID)#  endif
-   }
- #endif' > "${SRC_DIR}/cmAffinity.patch"
-
-      # Step 9: Apply patch to cmAffinity.cxx
-      - name: Apply patch to cmAffinity.cxx
-        working-directory: ${{ env.SRC_DIR }}
-        run: patch -p1 < cmAffinity.patch || (echo "Error: Failed to apply patch!" && exit 1)
-
-      # Step 10: Create dummy android_lf.h file
-      - name: Create dummy android_lf.h
-        run: |
-          mkdir -p "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include"
-          touch "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include/android_lf.h"
-
-      # Step 11: Patch cmlibarchive archive.h
-      - name: Patch cmlibarchive archive.h
-        run: |
-          ARCHIVE_H_PATH="${SRC_DIR}/Utilities/cmlibarchive/libarchive/archive.h"
-          if [ ! -f "$ARCHIVE_H_PATH" ]; then
-            echo "Error: File $ARCHIVE_H_PATH not found!" && exit 1
-          fi
-          sed -i 's/#include \"android_lf.h\"/\/\/ #include \"android_lf.h\"/' "$ARCHIVE_H_PATH"
-
-      # Step 12: Configure CMake for Android
+      # Step 5: Configure CMake for Android
       - name: Configure CMake for Android
         run: |
           mkdir -p ${BUILD_DIR}
@@ -151,19 +60,19 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF
 
-      # Step 13: Build CMake
+      # Step 6: Build CMake
       - name: Build CMake
         working-directory: ${{ env.BUILD_DIR }}
-        run: make -j$(nproc) || (echo "Error: Build failed!" && exit 1)
+        run: cmake --build . -- -j$(nproc)
 
-      # Step 14: Install CMake
+      # Step 7: Install CMake
       - name: Install CMake
         working-directory: ${{ env.BUILD_DIR }}
         run: |
-          make install DESTDIR=${INSTALL_DIR}
+          cmake --install . --prefix ${INSTALL_DIR}
           ls -lhR ${INSTALL_DIR}
 
-      # Step 15: Upload artifact
+      # Step 8: Upload artifact
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
