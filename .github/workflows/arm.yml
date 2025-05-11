@@ -6,7 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
       ANDROID_NDK_VERSION: "26.3.11579264"
       ANDROID_PLATFORM: "android-34"
@@ -38,26 +37,23 @@ jobs:
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
           yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT --update
-          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
-            "platforms;${ANDROID_PLATFORM}" \
-            "build-tools;34.0.0" \
-            "ndk;${ANDROID_NDK_VERSION}"
+          yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platforms;${ANDROID_PLATFORM}" "build-tools;34.0.0" "ndk;${ANDROID_NDK_VERSION}"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
 
       - name: Clone CMake source code
         run: |
-          git clone --depth 1 --branch ${{ env.CMAKE_VERSION }} https://github.com/Kitware/CMake.git ${{ env.SRC_DIR }}
+          git clone --depth 1 --branch ${CMAKE_VERSION} https://github.com/Kitware/CMake.git ${SRC_DIR}
 
       - name: Patch cmlibuv core.c for sched.h includes
         run: |
-          CORE_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/core.c"
+          CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
           sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
           sed -i '2i#include <sched.h>' "$CORE_C_PATH"
           head -n 10 "$CORE_C_PATH"
 
-      - name: Patch cmlibuv process.c for sched.h, pthread.h, defines, and stub
+      - name: Patch cmlibuv process.c
         run: |
-          PROCESS_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/process.c"
+          PROCESS_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/process.c"
           sed -i '1i#define _GNU_SOURCE' "$PROCESS_C_PATH"
           sed -i '2i#include <sched.h>' "$PROCESS_C_PATH"
           sed -i '3i#include <pthread.h>' "$PROCESS_C_PATH"
@@ -65,19 +61,16 @@ jobs:
           sed -i '5i#warning "Using stub pthread_setaffinity_np - actual function may be missing or require different defines"' "$PROCESS_C_PATH"
           sed -i '6iint pthread_setaffinity_np(pthread_t, size_t, const cpu_set_t *);' "$PROCESS_C_PATH"
           sed -i '7i#endif' "$PROCESS_C_PATH"
-          head -n 10 "$PROCESS_C_PATH"
 
-      - name: Patch cmlibuv pipe.c for unistd.h and pipe2 define
+      - name: Patch cmlibuv pipe.c
         run: |
-          PIPE_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/pipe.c"
+          PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
           sed -i '1i#define _GNU_SOURCE' "$PIPE_C_PATH"
           sed -i '2i#include <unistd.h>' "$PIPE_C_PATH"
-          head -n 10 "$PIPE_C_PATH"
 
-      - name: Patch cmAffinity.cxx to disable pthread affinity for Android
+      - name: Create patch file
         run: |
-          cat << 'EOF' > "${{ env.SRC_DIR }}/cmAffinity.patch"
---- a/Source/cmAffinity.cxx
+          echo '--- a/Source/cmAffinity.cxx
 +++ b/Source/cmAffinity.cxx
 @@ -51,6 +51,7 @@
        }
@@ -95,49 +88,42 @@ jobs:
 +#endif // !defined(ANDROID)
  #  endif
    }
- #endif
-EOF
-          cd "${{ env.SRC_DIR }}"
-          patch -p1 < cmAffinity.patch
+ #endif' > "${SRC_DIR}/cmAffinity.patch"
+
+      - name: Apply patch to cmAffinity.cxx
+        working-directory: ${{ env.SRC_DIR }}
+        run: patch -p1 < cmAffinity.patch
 
       - name: Create dummy android_lf.h
         run: |
-          DUMMY_HEADER_DIR="${{ env.SRC_DIR }}/Utilities/cmlibarchive/contrib/android/include"
-          DUMMY_HEADER_PATH="$DUMMY_HEADER_DIR/android_lf.h"
-          mkdir -p "$DUMMY_HEADER_DIR"
-          touch "$DUMMY_HEADER_PATH"
+          mkdir -p "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include"
+          touch "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include/android_lf.h"
 
       - name: Patch cmlibarchive archive.h
         run: |
-          ARCHIVE_H_PATH="${{ env.SRC_DIR }}/Utilities/cmlibarchive/libarchive/archive.h"
+          ARCHIVE_H_PATH="${SRC_DIR}/Utilities/cmlibarchive/libarchive/archive.h"
           sed -i 's/#include "android_lf.h"/\/\/ #include "android_lf.h"/' "$ARCHIVE_H_PATH"
 
       - name: Configure CMake for Android
         run: |
-          mkdir -p ${{ env.BUILD_DIR }}
-          cd ${{ env.BUILD_DIR }}
-          cmake ${{ env.SRC_DIR }} \
+          mkdir -p ${BUILD_DIR}
+          cd ${BUILD_DIR}
+          cmake ${SRC_DIR} \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${{ env.ANDROID_ABI }}" \
-            -DANDROID_PLATFORM="${{ env.ANDROID_PLATFORM }}" \
+            -DANDROID_ABI="${ANDROID_ABI}" \
+            -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF
 
       - name: Build CMake
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          make -j$(nproc)
+        working-directory: ${{ env.BUILD_DIR }}
+        run: make -j$(nproc)
 
       - name: Install CMake
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
-          cd ${{ env.BUILD_DIR }}
-          make install DESTDIR=${{ env.INSTALL_DIR }}
-          ls -lhR ${{ env.INSTALL_DIR }}
-
-      - name: Debug artifact output
-        run: |
-          echo "Isi folder hasil install artifact:"
-          ls -lhR ${{ env.INSTALL_DIR }}
+          make install DESTDIR=${INSTALL_DIR}
+          ls -lhR ${INSTALL_DIR}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
