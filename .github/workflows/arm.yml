@@ -48,7 +48,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/Kitware/CMake.git ${SRC_DIR}
 
-      # Step 5: Patch core.c for Android compatibility
+      # Step 5.1: Patch core.c for Android compatibility
       - name: Patch core.c
         run: |
           CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
@@ -59,6 +59,17 @@ jobs:
             echo "Patched $CORE_C_PATH successfully."
           else
             echo "$CORE_C_PATH not found. Skipping."
+          fi
+
+      # Step 5.2: Patch pipe.c for Android compatibility
+      - name: Patch pipe.c
+        run: |
+          PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
+          if [ -f "$PIPE_C_PATH" ]; then
+            sed -i 's/pipe2(temp, flags)/pipe(temp); \/\/ Manually handle flags/' "$PIPE_C_PATH"
+            echo "Patched $PIPE_C_PATH successfully."
+          else
+            echo "$PIPE_C_PATH not found. Skipping."
           fi
 
       # Step 6: Clean build directory
