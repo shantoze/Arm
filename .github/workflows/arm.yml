@@ -12,9 +12,9 @@ jobs:
       ANDROID_PLATFORM: "android-34"
       ANDROID_ABI: "armeabi-v7a"
       CMAKE_VERSION: "v3.29.3"
-      BUILD_DIR: "${{ github.workspace }}/cmake-build"
-      SRC_DIR: "${{ github.workspace }}/cmake-src"
-      INSTALL_DIR: "${{ github.workspace }}/cmake-android-arm-out"
+      BUILD_DIR: "/home/runner/work/Arm/Arm/cmake-build"
+      SRC_DIR: "/home/runner/work/Arm/Arm/cmake-src"
+      INSTALL_DIR: "/home/runner/work/Arm/Arm/cmake-android-arm-out"
 
     steps:
       - name: Checkout code
@@ -77,30 +77,28 @@ jobs:
       - name: Patch cmAffinity.cxx to disable pthread affinity for Android
         run: |
           cat << 'EOF' > "${{ env.SRC_DIR }}/cmAffinity.patch"
-          diff --git a/Source/cmAffinity.cxx b/Source/cmAffinity.cxx
-          index xxxxxxx..xxxxxxx 100644
-          --- a/Source/cmAffinity.cxx
-          +++ b/Source/cmAffinity.cxx
-          @@ -51,7 +51,9 @@
-                 }
-               }
-           #  else
-          +#if !defined(ANDROID)
-               cm_cpuset_t cpuset;
-               CPU_ZERO(&cpuset);
-               if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) == 0) {
-                 for (int i = 0; i < cpumask_size; ++i) {
-                   if (CPU_ISSET(i, &cpuset)) {
-                     processorsAvailable.insert(i);
-                   }
-                 }
-               }
-          +#endif // !defined(ANDROID)
-           #  endif
-             }
-           #endif
-          EOF
-          patch -p1 -d "${{ env.SRC_DIR }}" < "${{ env.SRC_DIR }}/cmAffinity.patch"
+--- a/Source/cmAffinity.cxx
++++ b/Source/cmAffinity.cxx
+@@ -51,6 +51,7 @@
+       }
+     }
+ #  else
++#if !defined(ANDROID)
+     cm_cpuset_t cpuset;
+     CPU_ZERO(&cpuset);
+     if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) == 0) {
+@@ -59,6 +60,7 @@
+           processorsAvailable.insert(i);
+         }
+       }
+     }
++#endif // !defined(ANDROID)
+ #  endif
+   }
+ #endif
+EOF
+          cd "${{ env.SRC_DIR }}"
+          patch -p1 < cmAffinity.patch
 
       - name: Create dummy android_lf.h
         run: |
@@ -119,7 +117,7 @@ jobs:
           mkdir -p ${{ env.BUILD_DIR }}
           cd ${{ env.BUILD_DIR }}
           cmake ${{ env.SRC_DIR }} \
-            -DCMAKE_TOOLCHAIN_FILE="${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="${{ env.ANDROID_ABI }}" \
             -DANDROID_PLATFORM="${{ env.ANDROID_PLATFORM }}" \
             -DCMAKE_BUILD_TYPE=Release \
