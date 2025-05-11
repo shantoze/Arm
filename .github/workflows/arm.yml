@@ -66,7 +66,7 @@ jobs:
         run: |
           PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
           if [ -f "$PIPE_C_PATH" ]; then
-            sed -i 's/pipe2(temp, flags)/pipe(temp); \/\/ Manually handle flags/' "$PIPE_C_PATH"
+            sed -i 's/pipe2(temp, flags)/pipe(temp); \/\/ TODO: Manually handle flags/' "$PIPE_C_PATH"
             echo "Patched $PIPE_C_PATH successfully."
           else
             echo "$PIPE_C_PATH not found. Skipping."
