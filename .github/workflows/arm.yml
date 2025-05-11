@@ -48,18 +48,42 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/Kitware/CMake.git ${SRC_DIR}
 
-      # Step 5: Patch pipe.c to replace pipe2 with pipe
-      - name: Patch pipe.c for Android compatibility
+      # Step 5: Patch problematic files
+      - name: Patch files
         run: |
+          CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
+          PROCESS_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/process.c"
           PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
-          if [ -f "$PIPE_C_PATH" ]; then
-            sed -i 's/pipe2(temp, flags)/pipe(temp); /* Manually set flags if needed */ /' "$PIPE_C_PATH"
-            echo "Patched $PIPE_C_PATH successfully."
+
+          # Patch core.c
+          if [ -f "$CORE_C_PATH" ]; then
+            sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
+            sed -i '2i#include <sched.h>' "$CORE_C_PATH"
+            echo "Patched $CORE_C_PATH successfully."
           else
-            echo "Error: File $PIPE_C_PATH not found!" && exit 1
+            echo "$CORE_C_PATH not found. Skipping."
           fi
 
-      # Step 6: Clean build directory (optional but recommended)
+          # Patch process.c
+          if [ -f "$PROCESS_C_PATH" ]; then
+            sed -i '1i#define _GNU_SOURCE' "$PROCESS_C_PATH"
+            sed -i '2i#include <sched.h>' "$PROCESS_C_PATH"
+            sed -i '3i#include <pthread.h>' "$PROCESS_C_PATH"
+            sed -i 's/old_pattern/new_replacement/g' "$PROCESS_C_PATH"
+            echo "Patched $PROCESS_C_PATH successfully."
+          else
+            echo "$PROCESS_C_PATH not found. Skipping."
+          fi
+
+          # Patch pipe.c
+          if [ -f "$PIPE_C_PATH" ]; then
+            sed -i 's/pipe2(temp, flags)/pipe(temp); /* Manually manage flags */ /' "$PIPE_C_PATH"
+            echo "Patched $PIPE_C_PATH successfully."
+          else
+            echo "$PIPE_C_PATH not found. Skipping."
+          fi
+
+      # Step 6: Clean build directory
       - name: Clean build directory
         run: |
           if [ -d "${BUILD_DIR}" ]; then
