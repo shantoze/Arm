@@ -16,14 +16,18 @@ jobs:
       INSTALL_DIR: "/home/runner/work/Arm/Arm/cmake-android-arm-out"
 
     steps:
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Step 2: Install build tools
       - name: Install build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build cmake make git wget unzip patch
+          sudo apt-get clean
 
+      # Step 3: Setup Android SDK and NDK
       - name: Set up Android SDK and NDK
         run: |
           export ANDROID_SDK_ROOT=$HOME/android-sdk
@@ -40,10 +44,20 @@ jobs:
           yes | sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platforms;${ANDROID_PLATFORM}" "build-tools;34.0.0" "ndk;${ANDROID_NDK_VERSION}"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" >> $GITHUB_ENV
 
+      # Debug step to check Android SDK and NDK installation
+      - name: Validate Android SDK and NDK Installation
+        run: |
+          echo "SDK Root: $ANDROID_SDK_ROOT"
+          ls -l $ANDROID_SDK_ROOT
+          echo "NDK Installed Versions:"
+          ls -l $ANDROID_SDK_ROOT/ndk
+
+      # Step 4: Clone CMake source code
       - name: Clone CMake source code
         run: |
           git clone --depth 1 --branch ${CMAKE_VERSION} https://github.com/Kitware/CMake.git ${SRC_DIR}
 
+      # Step 5: Patch cmlibuv core.c for sched.h includes
       - name: Patch cmlibuv core.c for sched.h includes
         run: |
           CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
@@ -51,6 +65,7 @@ jobs:
           sed -i '2i#include <sched.h>' "$CORE_C_PATH"
           head -n 10 "$CORE_C_PATH"
 
+      # Step 6: Patch cmlibuv process.c
       - name: Patch cmlibuv process.c
         run: |
           PROCESS_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/process.c"
@@ -58,16 +73,18 @@ jobs:
           sed -i '2i#include <sched.h>' "$PROCESS_C_PATH"
           sed -i '3i#include <pthread.h>' "$PROCESS_C_PATH"
           sed -i '4i#ifndef pthread_setaffinity_np' "$PROCESS_C_PATH"
-          sed -i '5i#warning "Using stub pthread_setaffinity_np - actual function may be missing or require different defines"' "$PROCESS_C_PATH"
+          sed -i '5i#warning \"Using stub pthread_setaffinity_np - actual function may be missing or require different defines\"' "$PROCESS_C_PATH"
           sed -i '6iint pthread_setaffinity_np(pthread_t, size_t, const cpu_set_t *);' "$PROCESS_C_PATH"
           sed -i '7i#endif' "$PROCESS_C_PATH"
 
+      # Step 7: Patch cmlibuv pipe.c
       - name: Patch cmlibuv pipe.c
         run: |
           PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
           sed -i '1i#define _GNU_SOURCE' "$PIPE_C_PATH"
           sed -i '2i#include <unistd.h>' "$PIPE_C_PATH"
 
+      # Step 8: Create patch file for cmAffinity.cxx
       - name: Create patch file
         run: |
           echo '--- a/Source/cmAffinity.cxx
@@ -90,20 +107,24 @@ jobs:
    }
  #endif' > "${SRC_DIR}/cmAffinity.patch"
 
+      # Step 9: Apply patch to cmAffinity.cxx
       - name: Apply patch to cmAffinity.cxx
         working-directory: ${{ env.SRC_DIR }}
         run: patch -p1 < cmAffinity.patch
 
+      # Step 10: Create dummy android_lf.h file
       - name: Create dummy android_lf.h
         run: |
           mkdir -p "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include"
           touch "${SRC_DIR}/Utilities/cmlibarchive/contrib/android/include/android_lf.h"
 
+      # Step 11: Patch cmlibarchive archive.h
       - name: Patch cmlibarchive archive.h
         run: |
           ARCHIVE_H_PATH="${SRC_DIR}/Utilities/cmlibarchive/libarchive/archive.h"
-          sed -i 's/#include "android_lf.h"/\/\/ #include "android_lf.h"/' "$ARCHIVE_H_PATH"
+          sed -i 's/#include \"android_lf.h\"/\/\/ #include \"android_lf.h\"/' "$ARCHIVE_H_PATH"
 
+      # Step 12: Configure CMake for Android
       - name: Configure CMake for Android
         run: |
           mkdir -p ${BUILD_DIR}
@@ -115,16 +136,19 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF
 
+      # Step 13: Build CMake with debugging
       - name: Build CMake
         working-directory: ${{ env.BUILD_DIR }}
         run: make -j$(nproc)
 
+      # Step 14: Install CMake
       - name: Install CMake
         working-directory: ${{ env.BUILD_DIR }}
         run: |
           make install DESTDIR=${INSTALL_DIR}
           ls -lhR ${INSTALL_DIR}
 
+      # Step 15: Upload artifact
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
