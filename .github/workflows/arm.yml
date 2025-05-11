@@ -115,8 +115,7 @@ jobs:
          }
        }
      }
-+#endif // !defined(ANDROID)
- #  endif
++#endif // !defined(ANDROID)#  endif
    }
  #endif' > "${SRC_DIR}/cmAffinity.patch"
 
