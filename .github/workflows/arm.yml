@@ -51,33 +51,11 @@ jobs:
       # Step 5: Patch problematic files
       - name: Patch files
         run: |
-          CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
-          PROCESS_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/process.c"
           PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
-
-          # Patch core.c
-          if [ -f "$CORE_C_PATH" ]; then
-            sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
-            sed -i '2i#include <sched.h>' "$CORE_C_PATH"
-            echo "Patched $CORE_C_PATH successfully."
-          else
-            echo "$CORE_C_PATH not found. Skipping."
-          fi
-
-          # Patch process.c
-          if [ -f "$PROCESS_C_PATH" ]; then
-            sed -i '1i#define _GNU_SOURCE' "$PROCESS_C_PATH"
-            sed -i '2i#include <sched.h>' "$PROCESS_C_PATH"
-            sed -i '3i#include <pthread.h>' "$PROCESS_C_PATH"
-            sed -i 's/old_pattern/new_replacement/g' "$PROCESS_C_PATH"
-            echo "Patched $PROCESS_C_PATH successfully."
-          else
-            echo "$PROCESS_C_PATH not found. Skipping."
-          fi
 
           # Patch pipe.c
           if [ -f "$PIPE_C_PATH" ]; then
-            sed -i 's/pipe2(temp, flags)/pipe(temp); /* Manually manage flags */ /' "$PIPE_C_PATH"
+            sed -i 's/pipe2(temp, flags)/pipe(temp); \/* Manually manage flags *\//' "$PIPE_C_PATH"
             echo "Patched $PIPE_C_PATH successfully."
           else
             echo "$PIPE_C_PATH not found. Skipping."
