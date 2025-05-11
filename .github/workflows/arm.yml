@@ -1,4 +1,4 @@
-name: Build CMake for Android
+name: Build CMake for Android (armeabi-v7a)
 
 on:
   workflow_dispatch:
@@ -12,9 +12,9 @@ jobs:
       ANDROID_PLATFORM: "android-34"
       ANDROID_ABI: "armeabi-v7a"
       CMAKE_VERSION: "v3.29.3"
-      BUILD_DIR: $HOME/cmake-build
-      SRC_DIR: $HOME/cmake-src
-      INSTALL_DIR: $HOME/cmake-android-arm-out
+      BUILD_DIR: "${{ github.workspace }}/cmake-build"
+      SRC_DIR: "${{ github.workspace }}/cmake-src"
+      INSTALL_DIR: "${{ github.workspace }}/cmake-android-arm-out"
 
     steps:
       - name: Checkout code
@@ -46,14 +46,16 @@ jobs:
 
       - name: Clone CMake source code
         run: |
-          git clone -- name: Patch cmlibuv core.c for sched.h includes
+          git clone --depth 1 --branch ${{ env.CMAKE_VERSION }} https://github.com/Kitware/CMake.git ${{ env.SRC_DIR }}
+
+      - name: Patch cmlibuv core.c for sched.h includes
         run: |
           CORE_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/core.c"
           sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
           sed -i '2i#include <sched.h>' "$CORE_C_PATH"
           head -n 10 "$CORE_C_PATH"
 
-      - name: Patch cmlibuv process.c for sched.h, pthread.h, defines, and stub for pthread_setaffinity_np
+      - name: Patch cmlibuv process.c for sched.h, pthread.h, defines, and stub
         run: |
           PROCESS_C_PATH="${{ env.SRC_DIR }}/Utilities/cmlibuv/src/unix/process.c"
           sed -i '1i#define _GNU_SOURCE' "$PROCESS_C_PATH"
@@ -74,29 +76,31 @@ jobs:
 
       - name: Patch cmAffinity.cxx to disable pthread affinity for Android
         run: |
-          CMAFFINITY_CXX_PATH="${{ env.SRC_DIR }}/Source/cmAffinity.cxx"
-          CMAFFINITY_PATCH_FILE="${{ env.SRC_DIR }}/cmAffinity.patch"
-          cat << 'EOF_PATCH' > "$CMAFFINITY_PATCH_FILE"
-@@ -51,7 +51,9 @@
-       }
-     }
- #  else
-+#if !defined(ANDROID)
-     cm_cpuset_t cpuset;
-     CPU_ZERO(&cpuset); // NOLINT(clang-tidy)
-     if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) == 0) {
-       for (int i = 0; i < cpumask_size; ++i) {
-         if (CPU_ISSET(i, &cpuset)) {
-           processorsAvailable.insert(i);
-         }
-       }
-     }
-+#endif // !defined(ANDROID)
- #  endif
-   }
- #endif
-EOF_PATCH
-          patch -p1 -d "${{ env.SRC_DIR }}" < "$CMAFFINITY_PATCH_FILE"
+          cat << 'EOF' > "${{ env.SRC_DIR }}/cmAffinity.patch"
+          diff --git a/Source/cmAffinity.cxx b/Source/cmAffinity.cxx
+          index xxxxxxx..xxxxxxx 100644
+          --- a/Source/cmAffinity.cxx
+          +++ b/Source/cmAffinity.cxx
+          @@ -51,7 +51,9 @@
+                 }
+               }
+           #  else
+          +#if !defined(ANDROID)
+               cm_cpuset_t cpuset;
+               CPU_ZERO(&cpuset);
+               if (pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) == 0) {
+                 for (int i = 0; i < cpumask_size; ++i) {
+                   if (CPU_ISSET(i, &cpuset)) {
+                     processorsAvailable.insert(i);
+                   }
+                 }
+               }
+          +#endif // !defined(ANDROID)
+           #  endif
+             }
+           #endif
+          EOF
+          patch -p1 -d "${{ env.SRC_DIR }}" < "${{ env.SRC_DIR }}/cmAffinity.patch"
 
       - name: Create dummy android_lf.h
         run: |
@@ -105,7 +109,7 @@ EOF_PATCH
           mkdir -p "$DUMMY_HEADER_DIR"
           touch "$DUMMY_HEADER_PATH"
 
-      - name: Patch cmlibarchive archive.h to comment out android_lf.h include
+      - name: Patch cmlibarchive archive.h
         run: |
           ARCHIVE_H_PATH="${{ env.SRC_DIR }}/Utilities/cmlibarchive/libarchive/archive.h"
           sed -i 's/#include "android_lf.h"/\/\/ #include "android_lf.h"/' "$ARCHIVE_H_PATH"
@@ -115,9 +119,9 @@ EOF_PATCH
           mkdir -p ${{ env.BUILD_DIR }}
           cd ${{ env.BUILD_DIR }}
           cmake ${{ env.SRC_DIR }} \
-            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="${ANDROID_ABI}" \
-            -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
+            -DCMAKE_TOOLCHAIN_FILE="${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${{ env.ANDROID_ABI }}" \
+            -DANDROID_PLATFORM="${{ env.ANDROID_PLATFORM }}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF
 
