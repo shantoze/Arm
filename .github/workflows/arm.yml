@@ -1,4 +1,4 @@
-name: Build CMake for Android
+name: Build CMake for Android (armeabi-v7a)
 
 on:
   workflow_dispatch:
