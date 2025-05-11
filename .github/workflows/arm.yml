@@ -48,23 +48,29 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/Kitware/CMake.git ${SRC_DIR}
 
-      # Step 5: Patch core.c to fix undeclared identifiers
-      - name: Patch core.c for sched.h includes
+      # Step 5: Patch pipe.c to replace pipe2 with pipe
+      - name: Patch pipe.c for Android compatibility
         run: |
-          CORE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/core.c"
-          if [ -f "$CORE_C_PATH" ]; then
-            sed -i '1i#define _GNU_SOURCE' "$CORE_C_PATH"
-            sed -i '2i#include <sched.h>' "$CORE_C_PATH"
-            sed -i '3i#include <unistd.h>' "$CORE_C_PATH"
-            echo "Patched $CORE_C_PATH successfully."
+          PIPE_C_PATH="${SRC_DIR}/Utilities/cmlibuv/src/unix/pipe.c"
+          if [ -f "$PIPE_C_PATH" ]; then
+            sed -i 's/pipe2(temp, flags)/pipe(temp); /* Manually set flags if needed */ /' "$PIPE_C_PATH"
+            echo "Patched $PIPE_C_PATH successfully."
           else
-            echo "Error: File $CORE_C_PATH not found!" && exit 1
+            echo "Error: File $PIPE_C_PATH not found!" && exit 1
           fi
 
-      # Step 6: Configure CMake for Android
+      # Step 6: Clean build directory (optional but recommended)
+      - name: Clean build directory
+        run: |
+          if [ -d "${BUILD_DIR}" ]; then
+            echo "Cleaning build directory..."
+            rm -rf "${BUILD_DIR}"
+          fi
+          mkdir -p "${BUILD_DIR}"
+
+      # Step 7: Configure CMake for Android
       - name: Configure CMake for Android
         run: |
-          mkdir -p ${BUILD_DIR}
           cd ${BUILD_DIR}
           cmake ${SRC_DIR} \
             -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake" \
@@ -73,19 +79,19 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF
 
-      # Step 7: Build CMake
+      # Step 8: Build CMake
       - name: Build CMake
         working-directory: ${{ env.BUILD_DIR }}
         run: cmake --build . -- -j$(nproc)
 
-      # Step 8: Install CMake
+      # Step 9: Install CMake
       - name: Install CMake
         working-directory: ${{ env.BUILD_DIR }}
         run: |
           cmake --install . --prefix ${INSTALL_DIR}
           ls -lhR ${INSTALL_DIR}
 
-      # Step 9: Upload artifact
+      # Step 10: Upload artifact
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
