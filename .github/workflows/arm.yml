@@ -1,4 +1,4 @@
-name: Build CMake for Android 32-bit (with fixes)
+name: Build CMake for Android 32-bit (with patches)
 
 on:
   workflow_dispatch:
@@ -31,10 +31,31 @@ jobs:
         echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
         echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
-    - name: Patch libuv to skip unsupported CPU affinity APIs
+    - name: Patch libuv to disable unsupported CPU affinity
       run: |
-        sed -i '/cpu_set_t set;/i #ifdef __ANDROID__\n  return 1;\n#else' cmake-src/Utilities/cmlibuv/src/unix/core.c
-        sed -i '/CPU_COUNT(&set);/a #endif' cmake-src/Utilities/cmlibuv/src/unix/core.c
+        cat << 'EOF' > fix_cpu_affinity.patch
+        --- a/Utilities/cmlibuv/src/unix/core.c
+        +++ b/Utilities/cmlibuv/src/unix/core.c
+        @@
+         unsigned int uv_available_parallelism(void) {
+        +#ifdef __ANDROID__
+        +  return 1;
+        +#else
+           cpu_set_t set;
+           int rc;
+           memset(&set, 0, sizeof(set));
+           if (0 == sched_getaffinity(0, sizeof(set), &set))
+             rc = CPU_COUNT(&set);
+           else
+             rc = 1;
+           if (rc < 1)
+             rc = 1;
+           return (unsigned) rc;
+        +#endif
+         }
+        EOF
+        cd cmake-src
+        patch -p1 < ../fix_cpu_affinity.patch
 
     - name: Set environment for ARMv7a
       run: |
