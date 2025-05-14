@@ -8,6 +8,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build cmake git python3
+
     - name: Checkout CMake source
       uses: actions/checkout@v4
       with:
@@ -19,10 +24,14 @@ jobs:
       with:
         ndk-version: r26b
 
-    - name: Set up dependencies
-      run: sudo apt-get update && sudo apt-get install -y ninja-build
+    - name: Create dummy android_lf.h
+      run: |
+        mkdir -p cmake-src/Utilities/cmlibarchive/contrib/android/include
+        echo "// dummy android_lf.h" > cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
+        echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
+        echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
-    - name: Configure toolchain environment
+    - name: Set environment for ARMv7a
       run: |
         echo "TOOLCHAIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
         echo "TARGET=armv7a-linux-androideabi" >> $GITHUB_ENV
@@ -49,7 +58,7 @@ jobs:
         ninja
         ninja install
 
-    - name: Upload artifact
+    - name: Upload compiled CMake
       uses: actions/upload-artifact@v4
       with:
         name: cmake-android32
