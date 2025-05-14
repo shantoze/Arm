@@ -1,4 +1,4 @@
-name: Build CMake for Android 32-bit (with patches)
+name: Build CMake for Android 32-bit (clean version)
 
 on:
   workflow_dispatch:
@@ -13,11 +13,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ninja-build cmake git python3
 
-    - name: Checkout CMake source
+    - name: Checkout this repository
       uses: actions/checkout@v4
-      with:
-        repository: Kitware/CMake
-        path: cmake-src
 
     - name: Set up Android NDK
       uses: nttld/setup-ndk@v1
@@ -31,13 +28,27 @@ jobs:
         echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
         echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
-    - name: Patch libuv to disable unsupported CPU affinity
+    - name: Replace uv_available_parallelism() safely
       run: |
-        sed -i '/unsigned int uv_available_parallelism(void)/a \
-#ifdef __ANDROID__\n  return 1;\n#else' cmake-src/Utilities/cmlibuv/src/unix/core.c
-
-        sed -i '/return (unsigned) rc;/a \
-#endif' cmake-src/Utilities/cmlibuv/src/unix/core.c
+        TEMP_FILE="cmake-src/Utilities/cmlibuv/src/unix/core.c"
+        awk '
+          BEGIN { replaced = 0 }
+          /unsigned int uv_available_parallelismvoid/ {
+            print "#ifdef __ANDROID__"
+            print "unsigned int uv_available_parallelism(void) { return 1; }"
+            print "#else"
+            skip = 1
+            next
+          }
+          /return unsigned rc;/ && skip {
+            print "#endif"
+            skip = 0
+            replaced = 1
+            next
+          }
+          { if (!skip) print }
+          END { if (!replaced) exit 1 }
+        ' "$TEMP_FILE" > "$TEMP_FILE.patched" && mv "$TEMP_FILE.patched" "$TEMP_FILE"
 
     - name: Set environment for ARMv7a
       run: |
