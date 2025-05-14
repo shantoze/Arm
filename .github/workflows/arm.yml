@@ -1,4 +1,4 @@
-name: Build CMake for Android 32-bit (final)
+name: Build CMake for Android 32-bit (stable patch)
 
 on:
   workflow_dispatch:
@@ -27,27 +27,26 @@ jobs:
         echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
         echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
-    - name: Patch uv_available_parallelism() safely
+    - name: Force-replace uv_available_parallelism() for Android
       run: |
         FILE="cmake-src/Utilities/cmlibuv/src/unix/core.c"
-        awk '
-          BEGIN { replaced = 0 }
-          /unsigned int uv_available_parallelismvoid/ {
-            print "#ifdef __ANDROID__"
-            print "unsigned int uv_available_parallelism(void) { return 1; }"
-            print "#else"
-            skip = 1
-            next
-          }
-          /return unsigned rc;/ && skip {
-            print "#endif"
-            skip = 0
-            replaced = 1
-            next
-          }
-          { if (!skip) print }
-          END { if (!replaced) exit 1 }
-        ' "$FILE" > "$FILE.patched" && mv "$FILE.patched" "$FILE"
+        sed -i '/unsigned int uv_available_parallelism(void)/,/return (unsigned) rc;/c\
+#ifdef __ANDROID__\
+unsigned int uv_available_parallelism(void) { return 1; }\
+#else\
+unsigned int uv_available_parallelism(void) {\
+  cpu_set_t set;\
+  int rc;\
+  memset(&set, 0, sizeof(set));\
+  if (0 == sched_getaffinity(0, sizeof(set), &set))\
+    rc = CPU_COUNT(&set);\
+  else\
+    rc = 1;\
+  if (rc < 1)\
+    rc = 1;\
+  return (unsigned) rc;\
+}\
+#endif' "$FILE"
 
     - name: Set environment for ARMv7a
       run: |
