@@ -1,4 +1,4 @@
-name: Build CMake for Android 32-bit (clean version)
+name: Build CMake for Android 32-bit (final)
 
 on:
   workflow_dispatch:
@@ -16,10 +16,9 @@ jobs:
     - name: Checkout this repository
       uses: actions/checkout@v4
 
-    - name: Set up Android NDK
-      uses: nttld/setup-ndk@v1
-      with:
-        ndk-version: r26b
+    - name: Clone CMake source
+      run: |
+        git clone --depth=1 https://github.com/Kitware/CMake.git cmake-src
 
     - name: Create dummy android_lf.h
       run: |
@@ -28,9 +27,9 @@ jobs:
         echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
         echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
-    - name: Replace uv_available_parallelism() safely
+    - name: Patch uv_available_parallelism() safely
       run: |
-        TEMP_FILE="cmake-src/Utilities/cmlibuv/src/unix/core.c"
+        FILE="cmake-src/Utilities/cmlibuv/src/unix/core.c"
         awk '
           BEGIN { replaced = 0 }
           /unsigned int uv_available_parallelismvoid/ {
@@ -48,7 +47,7 @@ jobs:
           }
           { if (!skip) print }
           END { if (!replaced) exit 1 }
-        ' "$TEMP_FILE" > "$TEMP_FILE.patched" && mv "$TEMP_FILE.patched" "$TEMP_FILE"
+        ' "$FILE" > "$FILE.patched" && mv "$FILE.patched" "$FILE"
 
     - name: Set environment for ARMv7a
       run: |
