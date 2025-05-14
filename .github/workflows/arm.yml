@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-cmake:
+  build:
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout CMake source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: Kitware/CMake
         path: cmake-src
@@ -18,35 +19,38 @@ jobs:
       with:
         ndk-version: r26b
 
-    - name: Configure Environment
+    - name: Set up dependencies
+      run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+    - name: Configure toolchain environment
       run: |
-        export NDK=$ANDROID_NDK_ROOT
-        export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-        export TARGET=armv7a-linux-androideabi
-        export API=21
+        echo "TOOLCHAIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+        echo "TARGET=armv7a-linux-androideabi" >> $GITHUB_ENV
+        echo "API=21" >> $GITHUB_ENV
+
+    - name: Configure & Build CMake
+      run: |
         export CC=$TOOLCHAIN/bin/${TARGET}${API}-clang
         export CXX=$TOOLCHAIN/bin/${TARGET}${API}-clang++
 
-        mkdir build
-        cd build
+        mkdir build && cd build
         cmake ../cmake-src \
           -DCMAKE_SYSTEM_NAME=Android \
           -DCMAKE_SYSTEM_VERSION=$API \
           -DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a \
-          -DCMAKE_ANDROID_NDK=$NDK \
+          -DCMAKE_ANDROID_NDK=$ANDROID_NDK_ROOT \
           -DCMAKE_SYSTEM_PROCESSOR=armv7-a \
           -DCMAKE_C_COMPILER=$CC \
           -DCMAKE_CXX_COMPILER=$CXX \
-          -DCMAKE_INSTALL_PREFIX=$PWD/install
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=$PWD/install \
+          -G Ninja
 
-    - name: Build & Install CMake
-      run: |
-        cd build
-        make -j4
-        make install
+        ninja
+        ninja install
 
-    - name: Upload compiled CMake binary
-      uses: actions/upload-artifact@v3
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
         name: cmake-android32
         path: build/install/bin/
