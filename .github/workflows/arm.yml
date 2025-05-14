@@ -1,4 +1,4 @@
-name: Build CMake for Android 32-bit
+name: Build CMake for Android 32-bit (with fixes)
 
 on:
   workflow_dispatch:
@@ -31,6 +31,11 @@ jobs:
         echo "#pragma once" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
         echo "#define ANDROID_LF_FAKE" >> cmake-src/Utilities/cmlibarchive/contrib/android/include/android_lf.h
 
+    - name: Patch libuv to skip unsupported CPU affinity APIs
+      run: |
+        sed -i '/cpu_set_t set;/i #ifdef __ANDROID__\n  return 1;\n#else' cmake-src/Utilities/cmlibuv/src/unix/core.c
+        sed -i '/CPU_COUNT(&set);/a #endif' cmake-src/Utilities/cmlibuv/src/unix/core.c
+
     - name: Set environment for ARMv7a
       run: |
         echo "TOOLCHAIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
@@ -58,7 +63,7 @@ jobs:
         ninja
         ninja install
 
-    - name: Upload compiled CMake
+    - name: Upload compiled CMake (Android 32-bit)
       uses: actions/upload-artifact@v4
       with:
         name: cmake-android32
