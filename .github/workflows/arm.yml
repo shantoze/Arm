@@ -33,29 +33,11 @@ jobs:
 
     - name: Patch libuv to disable unsupported CPU affinity
       run: |
-        cat << 'EOF' > fix_cpu_affinity.patch
-        --- a/Utilities/cmlibuv/src/unix/core.c
-        +++ b/Utilities/cmlibuv/src/unix/core.c
-        @@
-         unsigned int uv_available_parallelism(void) {
-        +#ifdef __ANDROID__
-        +  return 1;
-        +#else
-           cpu_set_t set;
-           int rc;
-           memset(&set, 0, sizeof(set));
-           if (0 == sched_getaffinity(0, sizeof(set), &set))
-             rc = CPU_COUNT(&set);
-           else
-             rc = 1;
-           if (rc < 1)
-             rc = 1;
-           return (unsigned) rc;
-        +#endif
-         }
-        EOF
-        cd cmake-src
-        patch -p1 < ../fix_cpu_affinity.patch
+        sed -i '/unsigned int uv_available_parallelism(void)/a \
+#ifdef __ANDROID__\n  return 1;\n#else' cmake-src/Utilities/cmlibuv/src/unix/core.c
+
+        sed -i '/return (unsigned) rc;/a \
+#endif' cmake-src/Utilities/cmlibuv/src/unix/core.c
 
     - name: Set environment for ARMv7a
       run: |
